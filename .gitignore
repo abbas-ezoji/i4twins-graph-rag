@@ -1,0 +1,50 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# === Virtual Environments ===
+venv/
+.env/
+.venv/
+.venv310/
+env/
+.env
+#========== db files ===========
+
+db.*
+
+# ==============mock-server/ 
+mock-server/
+*.html
+
+# === Model / Artifacts ===
+offline_multilingual_e5/
+checkpoints/
+*.pt
+*.pth
+*.onnx
+*.h5
+*.ckpt
+
+# === Logs & Runtime ===
+logs/
+*.log
+
+# === IDE / Editor ===
+.vscode/
+.idea/
+
+# === OS ===
+.DS_Store
+Thumbs.db
+# === jupyter files ===
+test.ipynb
+
+
+/output
+/storage
+/universal_input/UPLOAD_DIR
+/mock-server
+experts/generation/implementation_orchestrator/interaction/knowledge/repository/
