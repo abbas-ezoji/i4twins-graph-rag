@@ -1,40 +1,40 @@
-import json
-
+from app.embedding.local import LocalEmbeddingClient
+from app.retrieval.index import SQLiteEmbeddingStore
 from app.retrieval.retriever import Retriever
+from app.utils.config import settings
 
 
-class FakeEmbeddingClient:
-    def embed(self, texts):
-        vectors = []
-        for text in texts:
-            if "pump" in text.lower() or "pressure" in text.lower():
-                vectors.append([1.0, 0.0])
-            else:
-                vectors.append([0.0, 1.0])
-        return vectors
-
-
-def test_retrieval(tmp_path):
-    corpus = tmp_path / "corpus.jsonl"
-    records = [
-        {
-            "id": "DOC-01",
-            "title": "Pump",
-            "text": "P-200 maximum pressure is documented here.",
-        },
-        {
-            "id": "DOC-02",
-            "title": "Motor",
-            "text": "M-50 motor maintenance information.",
-        },
-    ]
-    corpus.write_text(
-        "\n".join(json.dumps(x) for x in records),
-        encoding="utf-8",
+def main() -> None:
+    embedding_client = LocalEmbeddingClient(
+        settings.embedding_model
     )
 
-    retriever = Retriever.from_jsonl(str(corpus), FakeEmbeddingClient())
-    results = retriever.retrieve("What is the pump pressure?", top_k=1)
+    store = SQLiteEmbeddingStore(
+        settings.embedding_db_path
+    )
 
-    assert len(results) == 1
-    assert results[0].document_id == "DOC-01"
+    retriever = Retriever(
+        embedding_client=embedding_client,
+        index=store,
+    )
+
+    query = "What is the operating pressure of P-200?"
+
+    results = retriever.retrieve(
+        query=query,
+        top_k=5,
+    )
+
+    print(f"\nQuery: {query}\n")
+
+    for rank, result in enumerate(results, start=1):
+        print(
+            f"{rank}. "
+            f"{result.document_id} | "
+            f"{result.score:.4f} | "
+            f"{result.title}"
+        )
+
+
+if __name__ == "__main__":
+    main()
