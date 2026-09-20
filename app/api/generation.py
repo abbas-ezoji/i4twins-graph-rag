@@ -1,68 +1,98 @@
-from functools import lru_cache
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.embedding.local import LocalEmbeddingClient
-from app.generation.generator import Generator
-from app.llm.ollama import OllamaClient
-from app.retrieval.retriever import Retriever
-from app.utils.config import settings
+from app.graph.workflow import build_graph
 
-router = APIRouter(tags=["generation"])
 
+router = APIRouter(
+    prefix="/generation",
+    tags=["generation"],
+)
+
+
+# ---------------------------------------------------------------------------
+# Request / Response models
+# ---------------------------------------------------------------------------
 
 class GenerationRequest(BaseModel):
-    message: str = Field(min_length=1)
-    top_k: int = Field(default=settings.top_k, ge=1, le=20)
-
-
-class Source(BaseModel):
-    document_id: str
-    title: str = ""
-    score: float
-    text: str
+    message: str = Field(..., min_length=1)
+    session_id: str | None = None
 
 
 class GenerationResponse(BaseModel):
+    session_id: str | None = None
+    message: str
     answer: str
-    sources: list[Source]
+    language: str | None = None
+    intent: str | None = None
+    answer_status: str | None = None
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    steps: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-@lru_cache
-def get_retriever() -> Retriever:
-    return Retriever.from_jsonl(
-        path=settings.corpus_path,
-        embedding_client=LocalEmbeddingClient(settings.embedding_model),
-    )
+# ---------------------------------------------------------------------------
+# Graph
+# ---------------------------------------------------------------------------
+
+_graph = build_graph()
 
 
-@lru_cache
-def get_generator() -> Generator:
-    return Generator(
-        llm_client=OllamaClient(
-            host=settings.ollama_host,
-            model=settings.llm_model,
-        )
-    )
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
-
-@router.post("/generation", response_model=GenerationResponse)
+@router.post("", response_model=GenerationResponse)
 def generate(request: GenerationRequest) -> GenerationResponse:
-    try:
-        results = get_retriever().retrieve(request.message, top_k=request.top_k)
-        answer = get_generator().generate(request.message, results)
-        return GenerationResponse(
-            answer=answer,
-            sources=[
-                Source(
-                    document_id=x.document_id,
-                    title=x.title,
-                    score=x.score,
-                    text=x.text,
-                )
-                for x in results
-            ],
+    """
+    Execute the Evidence Graph pipeline for a user message.
+    """
+
+    message = request.message.strip()
+
+    if not message:
+        raise HTTPException(
+            status_code=400,
+            detail="Message must not be empty.",
         )
+
+    initial_state = {
+        "session_id": request.session_id,
+        "message": message,
+        "steps": [],
+        "metadata": {},
+    }
+
+    try:
+        result = _graph.invoke(initial_state)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"Generation pipeline failed: {exc}",
+        ) from exc
+
+    return GenerationResponse(
+        session_id=result.get("session_id"),
+        message=message,
+        answer=result.get("answer", ""),
+        language=result.get("language"),
+        intent=result.get("intent"),
+        answer_status=result.get("answer_status"),
+        evidence=result.get("evidence", []),
+        steps=result.get("steps", []),
+        metadata=result.get("metadata", {}),
+    )
+
+
+@router.get("/health")
+def generation_health() -> dict[str, str]:
+    """
+    Health check for the generation pipeline.
+    """
+
+    return {
+        "status": "ok",
+        "service": "generation",
+    }

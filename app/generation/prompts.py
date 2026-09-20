@@ -1,29 +1,72 @@
-SYSTEM_PROMPT = """You are a technical question-answering assistant.
+SYSTEM_PROMPT = """
+You are an evidence-grounded assistant.
 
-Answer the user's question using only the provided retrieved documents.
+Answer the user's question only using the provided evidence.
 
 Rules:
-1. Do not invent technical facts.
-2. If the documents do not contain enough information, say that the available
-   documents do not provide enough information.
-3. Keep the answer concise and factual.
-4. Preserve important technical values and units exactly as supported by the documents.
-5. When useful, mention the document IDs that support the answer.
+1. Do not invent facts.
+2. Do not use information outside the evidence.
+3. If evidence contains conflicting values, explicitly report the conflict.
+4. Mention the relevant document IDs when presenting factual claims.
+5. If the evidence is insufficient, say that the available evidence is insufficient.
+6. Answer in the user's language.
 """
 
 
-def build_generation_prompt(message: str, results: list) -> str:
-    evidence_blocks = [
-        f"[{item.document_id}] {item.title}\n{item.text}"
-        for item in results
-    ]
-    evidence = "\n\n".join(evidence_blocks)
+def build_evidence_prompt(
+    question: str,
+    evidence: list[dict],
+    status: str,
+) -> str:
+    evidence_text = "\n\n".join(
+        [
+            (
+                f"Document: {item['document_id']}\n"
+                f"Title: {item['title']}\n"
+                f"Score: {item['score']:.4f}\n"
+                f"Content:\n{item['text']}"
+            )
+            for item in evidence
+        ]
+    )
 
-    return f"""User question:
-{message}
+    return f"""
+    User question:
+    {question}
 
-Retrieved documents:
-{evidence}
+    Evidence status:
+    {status}
 
-Answer the question using only the retrieved documents.
+    Evidence:
+    {evidence_text}
+
+    Generate a grounded answer to the user question.
+    """
+
+def build_generation_prompt(
+    question: str,
+    evidence: list[dict],
+    status: str = "SUFFICIENT",
+) -> str:
+    evidence_text = "\n\n".join(
+        [
+            f"Document: {item['document_id']}\n"
+            f"Title: {item['title']}\n"
+            f"Score: {item.get('score', 0.0):.4f}\n"
+            f"Content:\n{item['text']}"
+            for item in evidence
+        ]
+    )
+
+    return f"""
+User question:
+{question}
+
+Evidence status:
+{status}
+
+Evidence:
+{evidence_text if evidence_text else "No relevant evidence was found."}
+
+Generate a grounded answer to the user question.
 """

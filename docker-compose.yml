@@ -1,0 +1,60 @@
+services:
+
+  graph-rag:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: graph-rag
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      TOP_K: ${TOP_K}
+      CORPUS_PATH: ${CORPUS_PATH}
+      EMBEDDING_DB_PATH: /app/data/embeddings.db
+
+      LLM_BACKEND: ${LLM_BACKEND}
+      LLM_MODEL: ${LLM_MODEL}
+      OLLAMA_HOST: http://ollama:11434
+      LLM_TIMEOUT: ${LLM_TIMEOUT}
+
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DATABASE: ${MONGODB_DATABASE}
+      MONGODB_COLLECTION: ${MONGODB_COLLECTION}
+
+    volumes:
+      - embeddings_data:/app/data
+
+    depends_on:
+      - ollama
+      - mongodb
+
+  ollama:
+    image: ollama/ollama:latest
+
+    container_name: graph-rag-ollama
+
+    ports:
+      - "11434:11434"
+
+    volumes:
+      - ollama_data:/root/.ollama
+
+  mongodb:
+    image: mongo:7
+
+    container_name: graph-rag-mongodb
+
+    ports:
+      - "27017:27017"
+
+    volumes:
+      - mongodb_data:/data/db
+
+volumes:
+  embeddings_data:
+  ollama_data:
+  mongodb_data:
